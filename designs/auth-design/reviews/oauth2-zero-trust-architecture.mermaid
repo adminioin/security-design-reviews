@@ -1,0 +1,101 @@
+graph TB
+    subgraph "External Users & Partners"
+        USER["👤 User/Partner"]
+        DEVICE["📱 Device"]
+    end
+
+    subgraph "Trust Boundary - External"
+        APP["🌐 Web/Mobile App<br/>(SPA/React/Native)"]
+    end
+
+    subgraph "Identity Provider"
+        OKTA["🔐 Okta Authorization Server<br/>- OAuth2/OIDC<br/>- MFA Enforcement<br/>- Device Trust<br/>- Conditional Access"]
+        VAULT["🔑 Okta Vault<br/>- Client Secrets<br/>- API Credentials"]
+    end
+
+    subgraph "Trust Boundary - Corporate Network"
+        GW["🚪 API Gateway<br/>- mTLS Validation<br/>- Token Verification<br/>- Rate Limiting<br/>- Request Signing"]
+        CACHE["⚡ Token Cache<br/>- Public Keys<br/>- Device Registry<br/>- Revocation List"]
+    end
+
+    subgraph "Microservices"
+        SVC1["📦 Auth Service<br/>- User Mgmt<br/>- Profile"]
+        SVC2["📦 Data Service<br/>- CRUD Ops<br/>- Audit Logs"]
+        SVC3["📦 Admin Service<br/>- Compliance<br/>- Monitoring"]
+    end
+
+    subgraph "Data & Monitoring"
+        DB["🗄️ Encrypted Database<br/>- PII Data<br/>- User Secrets"]
+        LOG["📊 Audit Logs<br/>- Immutable<br/>- Encrypted<br/>- 1-Year Retention"]
+        SIEM["🔍 SIEM/Analytics<br/>- Anomaly Detection<br/>- Threat Hunting<br/>- Compliance Reports"]
+    end
+
+    subgraph "Device Posture"
+        MDM["📲 MDM Enrollment<br/>- OS Updates<br/>- Disk Encryption<br/>- No Jailbreak"]
+    end
+
+    %% User flow
+    USER -->|1. Initiates Login| APP
+    DEVICE -->|Device Info| MDM
+    MDM -->|Posture Status| OKTA
+
+    %% OAuth2 Flow
+    APP -->|2. Redirect to /authorize<br/>+ PKCE Challenge| OKTA
+    OKTA -->|3. MFA Prompt| USER
+    USER -->|4. Authenticate| OKTA
+    OKTA -->|5. Posture Check| MDM
+    OKTA -->|6. Return Auth Code<br/>+ State| APP
+    APP -->|7. Exchange Code for Token<br/>+ PKCE Verifier| OKTA
+    OKTA -->|8. Fetch Client Secret| VAULT
+    OKTA -->|9. Issue JWT Token<br/>id_token, access_token| APP
+
+    %% API Request Flow
+    APP -->|10. Bearer Token + Device ID<br/>TLS/mTLS| GW
+    GW -->|11. Validate Certificate<br/>Parse JWT| CACHE
+    CACHE -->|12. Fetch Okta Public Key<br/>Device Registry| GW
+    GW -->|13. Verify Signature<br/>Check Device Trust<br/>Rate Limit| GW
+    GW -->|14. Authorized Request<br/>with User Context| SVC1
+    GW -->|Forward to Service| SVC2
+    GW -->|Forward to Service| SVC3
+
+    %% Service Logic
+    SVC1 -->|Read/Write| DB
+    SVC2 -->|Read/Write| DB
+    SVC3 -->|Access Control<br/>RBAC Check| SVC1
+    SVC3 -->|Access Control<br/>RBAC Check| SVC2
+
+    %% Logging & Monitoring
+    SVC1 -->|Log Event| LOG
+    SVC2 -->|Log Event| LOG
+    SVC3 -->|Log Event| LOG
+    GW -->|Auth Event| LOG
+    OKTA -->|Audit Event| LOG
+
+    LOG -->|Ingest Logs| SIEM
+    SIEM -->|Generate Alerts<br/>Anomalies| OKTA
+    SIEM -->|Compliance Reports| SVC3
+
+    %% Token Refresh
+    APP -->|After Expiry<br/>Send Refresh Token| OKTA
+    OKTA -->|Rotate Token<br/>Invalidate Old| OKTA
+    OKTA -->|New Access Token| APP
+
+    %% Logout
+    APP -->|Click Logout| OKTA
+    OKTA -->|Clear Session<br/>Revoke Tokens| OKTA
+    OKTA -->|Redirect to Login| APP
+
+    style USER fill:#e1f5ff
+    style DEVICE fill:#e1f5ff
+    style APP fill:#fff3e0
+    style OKTA fill:#c8e6c9
+    style VAULT fill:#c8e6c9
+    style GW fill:#f3e5f5
+    style CACHE fill:#f3e5f5
+    style SVC1 fill:#ffe0b2
+    style SVC2 fill:#ffe0b2
+    style SVC3 fill:#ffe0b2
+    style DB fill:#ffccbc
+    style LOG fill:#ffccbc
+    style SIEM fill:#ffccbc
+    style MDM fill:#bbdefb
